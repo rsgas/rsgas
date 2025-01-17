@@ -1,0 +1,35 @@
+* {
+  padding: 0;
+  margin: 0;
+}
+
+.wrapper {
+  width: 100%;
+  height: 100vh;
+  display: flex;
+  justify-content: center;
+}
+
+.col {
+  width: 80%;
+}
+
+.big {
+  font-size: 120px;
+}
+
+.text-center {
+  text-align: center;
+}
+
+.hr {
+  width: 90%;
+  height: 1px;
+  margin: 20px auto;
+  background-color: gray;
+}
+
+.fs-6 {
+  font-size: 10px;
+  color: #181818;
+}
