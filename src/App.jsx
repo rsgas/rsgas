@@ -56,6 +56,7 @@ function App() {
           </div>
 
           <div className="text-center">
+            <i className='fs-6'>Commit By RSGA'S THANK YOU EVERYONE</i>
             <i className='fs-6'>© RSGA'S - ALL RIGHT RESERVED</i>
           </div>
         </div>
