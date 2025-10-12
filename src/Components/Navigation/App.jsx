@@ -59,12 +59,14 @@ const NavigationBar = () => {
             onClick={(e) => e.stopPropagation()}
             >
         <div className={`wrap-responsive ${isOpen ? "active" : ""}`}>
-          <div className={`container-responsive `}>
-            <a onClick={() => setIsOpen(false)} className="tag res" href='#home'>Home</a>
-            <a onClick={() => setIsOpen(false)} className="tag res" href='#about'>About</a>
-            <a onClick={() => setIsOpen(false)} className="tag res" href='#project'>Project</a>
-            <a onClick={() => setIsOpen(false)} className="tag res" href='#contact'>Contact</a>
-          </div>
+         
+            <div className={`container-responsive ${isOpen ? "active" : ""}`}>
+              <a onClick={() => setIsOpen(false)} className="tag res" href='#home'>Home</a>
+              <a onClick={() => setIsOpen(false)} className="tag res" href='#about'>About</a>
+              <a onClick={() => setIsOpen(false)} className="tag res" href='#project'>Project</a>
+              <a onClick={() => setIsOpen(false)} className="tag res" href='#contact'>Contact</a>
+            </div>
+       
         </div>
       </div>
     </>

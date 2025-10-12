@@ -189,6 +189,7 @@ body {
 }
 
 .responsive-navbar.active {
+  /* display: flex; */
   max-height: 500px;
   /* padding: 20px 0px; */
   opacity: 1;
@@ -210,7 +211,7 @@ body {
   backdrop-filter: blur(2px);
   padding: 20px;
   
-  display: flex;
+  display: none;
   flex-direction: column;
 
   background-color: #d4bdac93;
@@ -227,10 +228,17 @@ body {
   
 }
 
+.container-responsive.active {
+  display: flex;
+  /* backdrop-filter: blur(3px); */
+}
+
 
 
 .tag.res {
   color: gray;
+
+  display: hidden;
   font-size: 18px;
 }
 
