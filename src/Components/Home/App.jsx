@@ -22,6 +22,7 @@
 import './App.css'
 import "@fortawesome/fontawesome-free/css/all.min.css"
 import NavigationBar from '../Navigation/App.jsx'
+import logo from '../../Assets/icon/icon.png'
 
 import profile from '../../Assets/img/Profile/profile-2.png'
 import smk5 from '../../Assets/img/academy/bg.png'
@@ -41,6 +42,18 @@ import vjs from '../../Assets/img/skill-set/vjs.png'
 import smk from '../../Assets/img/Profile/smk.png'
 import rolling from '../../Assets/img/Profile/rolling.png'
 import profil from '../../Assets/img/Profile/profil.jpg'
+
+import poster500 from '../../Assets/img/Portofolio/500-Batang/Poster/poster-500.jpg'
+import img1500 from '../../Assets/img/Portofolio/500-Batang/img-1.jpg'
+import img2500 from '../../Assets/img/Portofolio/500-Batang/img-2.jpg'
+
+import lcLogo from '../../Assets/img/Portofolio/Lenscapt/logo.png'
+import lcBts2 from '../../Assets/img/Portofolio/Lenscapt/bts-2.jpg'
+import lcBts3 from '../../Assets/img/Portofolio/Lenscapt/bts-3.jpg'
+import lcBts1 from '../../Assets/img/Portofolio/Lenscapt/bts-1.jpg'
+import lcDesign from '../../Assets/img/Portofolio/Lenscapt/design.png'
+
+import ttPoster from '../../Assets/img/Portofolio/tabur-tuai/poster.jpg'
 
 const Home = () => {
     return (
@@ -200,12 +213,63 @@ const Project = () => {
         <div className="project wrap" id='project'>
             <div className="pr-container">
                 <div className="pr-title">
-                    <p>My Project</p>
+                    <p className='t1'>My Project</p>
                     <p>Ini beberapa projek yang 'besar' yang pernah saya kerjakan</p>
                 </div>
                 <div className="pr-wrap">
                     <div className="cards-pr start">
-                        <img src="" alt="" />
+                        <div className="img-pr">
+                            <img src={poster500} alt="" width='300px'/>
+                        </div>
+                        <div className="paraf-pr">
+                        <h3>500 Batang</h3>
+                            <p>Di kelas 11 ini kita membuat sebuah film gabungan dari beberapa PH yaitu Rolling, Oceara dan Vismaya, biasa dipanggil ROV berjudul 500 Batang. Bercerita mengenai seorang Gadis yang kesal dengan Kakaknya yang dihidupnya hanya merokok, bermain game dan judi online. </p>
+                            
+                            <p>Dalam film pertama saya ini saya banyak belajar mengenai Sinematografi, terutama dari segi Komposisi, Lighting, Camera movement, Seninya Visual Story Telling, Color Theory, dan banyak lainnya sebagai inti dari sinematografi itu sendiri.</p>
+                            <p>Di Project ini saya menjadi</p>
+                            <ol>
+                                <li>Director Of Photography</li>
+                                <li>Editor Online</li>
+                                <li>Colorist</li>
+                            </ol>
+                        </div>
+                    </div>
+                    <div className="text-gallery-pr">
+                        <h2>This Is My Little Gallery On This Project</h2>
+                    </div>
+                    <div className="gallery-pr">
+                        <img src={img1500} alt="" />
+                        <img src={img2500} alt="" />
+                    </div>
+                    <div className="cards-pr end">
+                        <div className="img-pr">
+                            <img src={ttPoster} alt="" width='300px'/>
+                        </div>
+                        <div className="paraf-pr-end">
+                            <h3>Tabur Tuai</h3>
+                            <p>Di kelas 10 ini saya diajak membuat sebuah film sebagai BTS <i>Behind The Scene</i> di film berjudul Tabur Tuai ini, Berceritakan seorang mahasiswa yang sering kedukun untuk mendapatkan uang yang dipakai foya-foya</p>
+                            <p>Dari film ini saat kelas 10 saya mendapatkan banyak pengalaman mengenai Produksi film terutama beberapa poin dalam sinematografi lalu saya mencoba untuk menerapkannya pada film saya berjudul 500 Batang</p>
+                            <p>Di Project ini saya menjadi seorang BTS</p>
+                        </div>
+                    </div>
+                    
+                    <div className="cards-lc center">
+                        <div className="img-lc">
+                            <img src={lcLogo} alt="" width='100px'/>
+                        </div>
+                        <div className="paraf-lc">
+                            <h3>Lenscapt</h3>
+                            <p>Di Kelas 10 ini kita membuat sebuah pameran fotografi yang biasa disebut <i>Lenscapt</i>, Lenscapt ini sebuah pameran fotografi yang kita dirikan untuk pertama kali dalam angkatan Broadcasting Dan Produksi Film Ini</p>
+                            <p>Dalam Projek ini saya menjadi seorang Ketua Pelaksana untuk pertama kalinya dan menjadi pengalaman yang sangat amat berharga</p>
+                        </div>
+                    </div>
+                    <div className="text-gallery-pr">
+                        <h2>This Is My Little Gallery On This Project</h2>
+                    </div>
+                    <div className="gallery-pr">
+                        <img src={lcBts1} alt="" />
+                        <img src={lcBts2} alt="" />
+                        <img src={lcBts3} alt="" />
                     </div>
                 </div>
             </div>
@@ -213,19 +277,34 @@ const Project = () => {
     )
 }
 
-const Contact = () => {
-    return (
-        <div className="contact wrap" id='contact'>
-            <h1>Hello World From Contact</h1>
-        </div>
-    )
-}
-
 const Foot = () => {
     return (
-        <div className="foot wrap">      
-            <h1>Hello World From Foot</h1>
+        <>
+        <div className="footer wrap">      
+            <div className="foot cc">
+                <div className="foot title">
+                    <img src={logo} alt="Logo" className='img-icon' width='120px'/>
+                    <div className="subparaf">
+                        <h2 style={{
+                            "margin": 0
+                        }}>Rsgas</h2>
+                        <i style={{ "margin": 0}}>Muhamad Rizky Ibrahim</i>
+                    </div>
+                </div>
+                <div className="paraf-foot">
+                    <h1>Try Contact Me!</h1>
+                    <ol>
+                        <li><a target='_blank' href="https://www.instagram.com/unholybim/">Instagram</a></li>
+                        <li><a target='_blank' href="https://github.com/rsgas">Github</a></li>
+                        <li><a target='_blank' href="https://wa.me/62895354070008">Whatsapp</a></li>
+                    </ol>
+                </div>
+            </div>
         </div>
+        <div className="copyright">
+            <a href="https://github.com/rsgas/rsgas?tab=MIT-1-ov-file" target='_blank'>© Copyright 2025 - RSGAS - All Right Reserved</a>
+        </div>
+        </>
     )
 }
 
@@ -236,20 +315,11 @@ const Main = () => {
             <div className="wrap-nav">
                 <NavigationBar/>
             </div>
-            {/* <div className="closed-gap">
-                <br />
-                <br />
-                <br />
-                <br />
-                <br />
-                <br />
-            </div> */}
             <div className="main-parrents">
                 <Home/>
                 <About/>
                 <Skillset/>
                 <Project/>
-                <Contact/>
                 <Foot/>
             </div>
         </>

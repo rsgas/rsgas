@@ -46,8 +46,8 @@ const NavigationBar = () => {
           <div className="container">
             <a className="tag" href='#home'>Home</a>
             <a className="tag" href='#about'>About</a>
+            <a className="tag" href='#skillset'>Skillset</a>
             <a className="tag" href='#project'>Project</a>
-            <a className="tag" href='#contact'>Contact</a>
           </div>
         </div>
           <div className="icon-tags">
@@ -63,8 +63,8 @@ const NavigationBar = () => {
             <div className={`container-responsive ${isOpen ? "active" : ""}`}>
               <a onClick={() => setIsOpen(false)} className="tag res" href='#home'>Home</a>
               <a onClick={() => setIsOpen(false)} className="tag res" href='#about'>About</a>
+              <a onClick={() => setIsOpen(false)} className="tag res" href='#skillset'>skillset</a>
               <a onClick={() => setIsOpen(false)} className="tag res" href='#project'>Project</a>
-              <a onClick={() => setIsOpen(false)} className="tag res" href='#contact'>Contact</a>
             </div>
        
         </div>
