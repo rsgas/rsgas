@@ -40,7 +40,7 @@ const NavigationBar = () => {
           <a href="#">
             <img src={logo} alt="Logo" className='img-icon'/>
           </a>
-          <h2>Awhbiem</h2>
+          <h2>Rsga's</h2>
         </div>
         <div className="tags">
           <div className="container">

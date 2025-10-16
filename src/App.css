@@ -36,10 +36,8 @@
 
 * {
   scroll-behavior: smooth;
-  color: black;
-  font-family: "Oswald", sans-serif;
-
-  font-weight: 200;
+  /* color: black; */
+  
 }
 
 body {
@@ -51,6 +49,10 @@ body {
   background-size: 100px 100px;
   padding: 0;
   margin: 0;
+
+  font-family: "Oswald", sans-serif;
+
+  font-weight: 200;
 }
 
 /* .parrents {
@@ -68,7 +70,7 @@ body {
   /* width: 100; */
 
   padding: 30px 20px;
-  backdrop-filter: blur(3px);
+  backdrop-filter: blur(10px);
 
   border: 1px solid #bda797af ;
 
@@ -218,6 +220,7 @@ body {
   /* backdrop-filter: blur(0px); */
 
   border: 1px solid #bda797af ;
+  /* color: white; */
   border-radius: 12px;
   
   gap: 10px;
@@ -236,7 +239,7 @@ body {
 
 
 .tag.res {
-  color: gray;
+  color: white;
 
   display: hidden;
   font-size: 18px;
