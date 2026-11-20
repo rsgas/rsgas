@@ -1,20 +1,20 @@
 import { beginningImages } from '../data/content.js'
 
 export function renderBeginning() {
-  const cards = [...beginningImages, ...beginningImages]
   return `
-    <section class="beginning" id="beginning" data-section="stop" aria-labelledby="beginning-title">
-      <div class="beginning-images reveal-x" aria-label="A scrolling portrait of moments">
+    <section class="beginning" id="beginning" data-section="stop" data-reveal="bg" aria-labelledby="beginning-title">
+      <div class="beginning-images" data-reveal="media" aria-label="A scrolling portrait of moments">
         <div class="beginning-track">
-          ${cards.map((image) => `
-            <figure class="beginning-frame" style="${image.url ? `background-image:url('${image.url}')` : ''}">
+          ${beginningImages.map((image) => `
+            <figure class="beginning-frame">
+              ${image.url ? `<img src="${image.url}" alt="${image.label}" loading="lazy" decoding="async" draggable="false">` : ''}
               ${image.url ? '' : `<span>${image.label}</span>`}
               <b>${image.note}</b>
             </figure>
           `).join('')}
         </div>
       </div>
-      <div class="beginning-copy reveal-x">
+      <div class="beginning-copy" data-reveal="text" data-inner-scroll tabindex="0" aria-label="The Beginning story">
         <p class="section-index">01 — THE BEGINNING</p>
         <h2 id="beginning-title">It started<br>with <em>curiosity.</em></h2>
         <p class="beginning-lead">A classroom became a set. A camera became a way to notice.</p>

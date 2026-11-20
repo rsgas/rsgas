@@ -1,3 +1,6 @@
+import gsap from 'gsap'
+import { revealConfig } from '../config/reveal.js'
+
 const galleries = new Map()
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({
   '&': '&amp;',
@@ -10,9 +13,9 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character
 export function renderMasonryGallery({ id, title, description, items, theme }) {
   galleries.set(id, items)
   return `
-    <section class="masonry-section masonry-section--${theme}" id="${id}" data-section="stop" data-scrollbar-theme="${theme}" data-masonry-gallery="${id}" aria-labelledby="${id}-title">
+    <section class="masonry-section masonry-section--${theme}" id="${id}" data-section="stop" data-reveal="bg" data-scrollbar-theme="${theme}" data-masonry-gallery="${id}" aria-labelledby="${id}-title">
       <div class="masonry-scroll" data-masonry-scroll tabindex="0" aria-label="${escapeHtml(title)} gallery">
-        <header class="masonry-heading">
+        <header class="masonry-heading" data-reveal="text">
           <div>
             <p>${escapeHtml(title)}</p>
             <h2 id="${id}-title">${escapeHtml(title)}</h2>
@@ -31,9 +34,175 @@ export function mountMasonryGalleries() {
     const items = galleries.get(gallery.dataset.masonryGallery)
     const scroll = gallery.querySelector('[data-masonry-scroll]')
     const columnsRoot = gallery.querySelector('[data-masonry-columns]')
+    let cardObserver
+    let revealActive = false
+    let batchRunning = false
+    let revealGeneration = 0
+    let revealTimeline
+    let revealQueue = []
+    let pendingCards = new Set()
+    let queuedCards = new Set()
+    let revealedCards = new WeakSet()
+    let flushFrame = 0
     let resizeFrame
 
+    const cards = () => Array.from(columnsRoot.querySelectorAll('[data-card-reveal]'))
+    const captionFor = (card) => card.querySelector('[data-reveal="text"]')
+    const sortReadingOrder = (first, second) => {
+      const firstRect = first.getBoundingClientRect()
+      const secondRect = second.getBoundingClientRect()
+      return firstRect.top - secondRect.top || firstRect.left - secondRect.left
+    }
+
+    const hideCards = () => {
+      const currentCards = cards()
+      const captions = currentCards.map(captionFor).filter(Boolean)
+      gsap.killTweensOf([...currentCards, ...captions])
+      gsap.set([...currentCards, ...captions], { clearProps: 'transform,opacity,visibility,willChange' })
+      gsap.set(currentCards, { x: 40, opacity: 0, visibility: 'hidden' })
+      gsap.set(captions, { opacity: 0, visibility: 'hidden' })
+    }
+
+    const resetCardReveal = () => {
+      revealGeneration += 1
+      revealActive = false
+      batchRunning = false
+      cardObserver?.disconnect()
+      window.cancelAnimationFrame(flushFrame)
+      flushFrame = 0
+      revealQueue = []
+      pendingCards.clear()
+      queuedCards.clear()
+      revealedCards = new WeakSet()
+      revealTimeline?.kill()
+      revealTimeline = undefined
+      hideCards()
+    }
+
+    const waitForCardImages = async (batch) => {
+      const images = batch.flatMap((card) => Array.from(card.querySelectorAll('img')))
+      if (!images.length) return
+
+      let timeout
+      await Promise.race([
+        Promise.all(images.map((image) => {
+          const loaded = image.complete
+            ? Promise.resolve()
+            : new Promise((resolve) => {
+              image.addEventListener('load', resolve, { once: true })
+              image.addEventListener('error', resolve, { once: true })
+            })
+          return loaded.then(() => (
+            typeof image.decode === 'function' ? image.decode() : undefined
+          )).catch(() => undefined)
+        })),
+        new Promise((resolve) => {
+          timeout = window.setTimeout(resolve, revealConfig.IMAGE_DECODE_TIMEOUT)
+        }),
+      ])
+      window.clearTimeout(timeout)
+    }
+
+    const runNextBatch = async () => {
+      if (!revealActive || batchRunning || !revealQueue.length) return
+      batchRunning = true
+      const generation = revealGeneration
+      const batch = revealQueue.splice(0).sort(sortReadingOrder)
+      await waitForCardImages(batch)
+      if (!revealActive || generation !== revealGeneration) return
+
+      const stagger = Math.min(revealConfig.CARD_STAGGER, revealConfig.SEQUENCE_MAX / batch.length)
+      revealTimeline = gsap.timeline({
+        onComplete: () => {
+          const targets = batch.flatMap((card) => [card, captionFor(card)].filter(Boolean))
+          gsap.set(targets, { clearProps: 'transform,opacity,visibility,willChange' })
+          const hidden = targets.filter((element) => {
+            const style = getComputedStyle(element)
+            return style.visibility !== 'visible' || Number(style.opacity) < 1
+          })
+          if (hidden.length) gsap.set(hidden, { x: 0, opacity: 1, visibility: 'visible' })
+          batch.forEach((card) => revealedCards.add(card))
+          batchRunning = false
+          runNextBatch()
+        },
+      })
+
+      batch.forEach((card, index) => {
+        const caption = captionFor(card)
+        const start = index * stagger
+        card.style.willChange = 'transform, opacity'
+        if (caption) caption.style.willChange = 'opacity'
+        revealTimeline.set(card, { visibility: 'visible' }, start)
+        revealTimeline.fromTo(card, { x: 40, opacity: 0 }, {
+          x: 0,
+          opacity: 1,
+          duration: revealConfig.CARD_DURATION,
+          ease: 'power3.out',
+          clearProps: 'transform,opacity,visibility,willChange',
+        }, start)
+        if (caption) {
+          const captionStart = start + revealConfig.CARD_TEXT_DELAY
+          revealTimeline.set(caption, { visibility: 'visible' }, captionStart)
+          revealTimeline.fromTo(caption, { opacity: 0 }, {
+            opacity: 1,
+            duration: revealConfig.CARD_DURATION,
+            ease: 'power3.out',
+            clearProps: 'opacity,visibility,willChange',
+          }, captionStart)
+        }
+      })
+    }
+
+    const flushPendingCards = () => {
+      flushFrame = 0
+      if (!revealActive || !pendingCards.size) return
+      pendingCards.forEach((card) => {
+        pendingCards.delete(card)
+        queuedCards.add(card)
+        revealQueue.push(card)
+      })
+      runNextBatch()
+    }
+
+    const queueVisibleCard = (card) => {
+      if (!revealActive || queuedCards.has(card) || revealedCards.has(card)) return
+      pendingCards.add(card)
+      if (!flushFrame) flushFrame = window.requestAnimationFrame(flushPendingCards)
+    }
+
+    const startCardReveal = () => {
+      if (revealActive) return
+      revealActive = true
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        const currentCards = cards()
+        gsap.set([...currentCards, ...currentCards.map(captionFor).filter(Boolean)], {
+          clearProps: 'transform,opacity,visibility,willChange',
+        })
+        gsap.set([...currentCards, ...currentCards.map(captionFor).filter(Boolean)], {
+          x: 0,
+          opacity: 1,
+          visibility: 'visible',
+        })
+        currentCards.forEach((card) => revealedCards.add(card))
+        return
+      }
+
+      cards().forEach((card) => {
+        gsap.set(card, { visibility: 'visible' })
+        cardObserver.observe(card)
+      })
+    }
+
+    cardObserver = new IntersectionObserver((entries) => {
+      entries.filter((entry) => entry.isIntersecting).forEach((entry) => {
+        cardObserver.unobserve(entry.target)
+        queueVisibleCard(entry.target)
+      })
+    }, { root: scroll, threshold: 0.01 })
+
     const renderColumns = () => {
+      const restartReveal = revealActive
+      if (restartReveal) resetCardReveal()
       const styles = getComputedStyle(scroll)
       const padding = parseFloat(styles.paddingLeft) + parseFloat(styles.paddingRight)
       const availableWidth = Math.max(1, scroll.clientWidth - padding)
@@ -53,13 +222,13 @@ export function mountMasonryGalleries() {
           ? `<a class="masonry-project-link" href="${escapeHtml(link)}" target="_blank" rel="noopener noreferrer">${escapeHtml(item.linkLabel || 'View project')} <span aria-hidden="true">↗</span></a>`
           : ''
         return `
-          <article class="masonry-card" style="--item-ratio:${ratio}">
-            <span class="masonry-media">
+          <article class="masonry-card" data-card-reveal style="--item-ratio:${ratio}">
+            <span class="masonry-media" data-reveal="media">
               ${item.image
                 ? `<img src="${escapeHtml(item.image)}" alt="${escapeHtml(item.title)}" loading="lazy" decoding="async">`
                 : `<span class="masonry-placeholder">${escapeHtml(item.category || 'Image placeholder')}</span>`}
             </span>
-            <span class="masonry-card-caption">
+            <span class="masonry-card-caption" data-reveal="text">
               <span class="masonry-card-heading">
                 <strong>${escapeHtml(item.title)}</strong>
                 <span>${escapeHtml(item.role || item.category || '')}</span>
@@ -88,7 +257,9 @@ export function mountMasonryGalleries() {
         columnsRoot.style.setProperty('--sparse-min-height', `${minHeight}px`)
         columnsRoot.style.setProperty('--sparse-max-height', `${maxHeight}px`)
         columnsRoot.innerHTML = items.map(renderCard).join('')
+        hideCards()
         scroll.scrollTop = previousScroll
+        if (restartReveal) startCardReveal()
         return
       }
 
@@ -115,10 +286,14 @@ export function mountMasonryGalleries() {
       })
 
       columnsRoot.innerHTML = columns.map((column) => `<div class="masonry-column">${column.items.join('')}</div>`).join('')
+      hideCards()
       scroll.scrollTop = previousScroll
+      if (restartReveal) startCardReveal()
     }
 
     renderColumns()
+    gallery.addEventListener('sectionrevealcomplete', startCardReveal)
+    gallery.addEventListener('sectionrevealreset', resetCardReveal)
     window.addEventListener('resize', () => {
       cancelAnimationFrame(resizeFrame)
       resizeFrame = requestAnimationFrame(renderColumns)

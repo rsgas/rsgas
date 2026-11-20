@@ -5,10 +5,10 @@ import { renderMasonryGallery } from '../Components/MasonryGallery.js'
 
 export function renderWork() {
   return `
-    <section class="work-divider section-reveal" data-section="passthrough" aria-label="Work section title">
-      <p>03 / SELECTED WORK</p>
-      <h2 id="work">Work</h2>
-      <p>Films, photographs<br>and production stories.</p>
+    <section class="work-divider" data-section="passthrough" data-reveal="bg" aria-label="Work section title">
+      <p data-reveal="text">03 / SELECTED WORK</p>
+      <h2 id="work" data-reveal="text">Work</h2>
+      <p data-reveal="text">Films, photographs<br>and production stories.</p>
     </section>
     ${renderMasonryGallery({
       id: 'work-gallery',

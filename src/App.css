@@ -13,12 +13,14 @@ html {
   max-width: 100%;
   overflow-x: clip;
   scroll-behavior: auto;
+  overscroll-behavior: none;
 }
 body {
   width: 100%;
   max-width: 100%;
   margin: 0;
   overflow-x: clip;
+  overscroll-behavior: none;
   background: var(--white);
   color: var(--black);
   font-family: 'Montserrat', sans-serif;
@@ -39,7 +41,9 @@ a { color: inherit; }
 
 .hero {
   position: relative;
-  min-height: 100svh;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -50,8 +54,6 @@ a { color: inherit; }
 }
 .hero-kicker {
   margin: 0;
-  opacity: 0;
-  transform: translateY(10px);
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.22em;
@@ -79,8 +81,6 @@ a { color: inherit; }
   display: flex;
   justify-content: space-between;
   align-items: end;
-  opacity: 0;
-  transform: translateY(12px);
 }
 .hero-bottom p {
   margin: 0;
@@ -130,30 +130,36 @@ a { color: inherit; }
 @keyframes marquee { to { transform: translateX(-50%); } }
 
 .beginning {
-  min-height: 100svh;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
   display: grid;
   grid-template-columns: 50% 50%;
   background: var(--white);
   border-bottom: 1px solid var(--line);
 }
 .beginning-images {
-  height: 100svh;
-  min-height: 700px;
+  height: 100%;
+  min-height: 0;
   overflow: hidden;
   border-right: 1px solid var(--line);
   background: #d3d3cc;
+  cursor: grab;
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
 }
+.beginning-images[data-dragging="true"] { cursor: grabbing; }
 .beginning-track {
   display: flex;
   flex-direction: column;
   gap: 12px;
   width: 100%;
-  animation: vertical-carousel 32s linear infinite;
 }
-.beginning-images:hover .beginning-track { animation-play-state: paused; }
 .beginning-frame {
   position: relative;
   flex: 0 0 auto;
+  width: 100%;
   height: 310px;
   margin: 0;
   background:
@@ -163,6 +169,16 @@ a { color: inherit; }
   background-position: center;
   color: var(--white);
   border-bottom: 1px solid rgba(245,245,240,.25);
+}
+.beginning-frame img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
 }
 .beginning-frame span {
   position: absolute;
@@ -180,11 +196,14 @@ a { color: inherit; }
   font-size: 48px;
   opacity: .45;
 }
-@keyframes vertical-carousel { to { transform: translateY(-50%); } }
 .beginning-copy {
   display: flex;
   flex-direction: column;
   justify-content: center;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   padding: 8vw 7vw;
 }
 .section-index, .work-divider > p, .drawing-header > p, .journey-header > p {
@@ -486,7 +505,22 @@ a { color: inherit; }
   .masonry-card:hover .masonry-project-link::after { transform: scaleX(1); }
 }
 
-.journey { padding: 120px 3.2vw; background: var(--black); color: var(--white); }
+.journey {
+  height: 100vh;
+  height: 100dvh;
+  padding: 0;
+  overflow: hidden;
+  background: var(--black);
+  color: var(--white);
+}
+.journey-scroll {
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: 120px 3.2vw;
+}
 .journey-header { display: grid; grid-template-columns: 25% 75%; align-items: start; }
 .journey-header h2 { margin: 0; }
 .journey-header h2 em { color: var(--grey); }
@@ -505,7 +539,8 @@ a { color: inherit; }
 .journey-row > p:last-child { max-width: 520px; color: rgba(245,245,240,.72); }
 
 .footer {
-  height: 100svh;
+  height: 100vh;
+  height: 100dvh;
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -547,28 +582,26 @@ a { color: inherit; }
 .footer-bottom > a { justify-self: end; }
 
 @media (max-width: 900px) {
-  .hero { min-height: 700px; padding: 24px 20px 20px; }
+  .hero { min-height: 0; padding: 24px 20px 20px; }
   .hero-title { font-size: clamp(58px, 16.5vw, 100px); line-height: .86; }
   .hero-title span { white-space: normal; }
   .hero-bottom { align-items: end; }
-  .beginning { grid-template-columns: 1fr; }
-  .beginning-images { height: 390px; min-height: 390px; overflow: hidden; border-right: 0; border-bottom: 1px solid var(--line); }
+  .beginning { grid-template-columns: 1fr; grid-template-rows: 40dvh 60dvh; }
+  .beginning-images { height: 100%; min-height: 0; overflow: hidden; border-right: 0; border-bottom: 1px solid var(--line); }
   .beginning-track {
-    height: 390px;
+    height: 100%;
     flex-direction: row;
     width: max-content;
-    animation: horizontal-carousel 28s linear infinite;
   }
-  .beginning-frame { width: 300px; height: 390px; }
-  @keyframes horizontal-carousel { to { transform: translateX(-50%); } }
-  .beginning-copy { min-height: 620px; padding: 80px 20px; }
+  .beginning-frame { width: 300px; height: 100%; }
+  .beginning-copy { height: 60dvh; min-height: 0; justify-content: flex-start; padding: 24px 20px; }
   .beginning-copy h2 { font-size: 58px; }
   .beginning-body { grid-template-columns: 1fr; }
   .work-divider { grid-template-columns: 1fr; gap: 24px; min-height: 260px; text-align: left; }
   .work-divider h2 { font-size: 110px; text-align: left; }
   .work-divider > p:last-child { justify-self: start; text-align: left; }
   .masonry-scroll { padding-right: 20px; padding-left: 20px; }
-  .journey { padding: 90px 20px; }
+  .journey-scroll { padding: 90px 20px; }
   .journey-header { grid-template-columns: 1fr; gap: 24px; }
   .journey-header h2 { font-size: 58px; }
   .journey-row { grid-template-columns: 90px 1fr; padding: 30px 0; }
@@ -580,7 +613,7 @@ a { color: inherit; }
 }
 
 @media (max-width: 560px) {
-  .hero { min-height: 640px; }
+  .hero { min-height: 0; }
   .hero-title { font-size: 52px; }
   .hero-kicker { font-size: 8px; }
   .hero-bottom p { font-size: 7px; }
@@ -588,10 +621,7 @@ a { color: inherit; }
   .marquee { height: 62px; }
   .marquee-track { font-size: 16px; }
   .beginning-copy h2, .drawing-header h2, .journey-header h2 { font-size: 46px; }
-  .beginning-images { height: 330px; min-height: 330px; }
-  .beginning-track { height: 330px; }
-  .beginning-frame { width: 270px; height: 330px; }
-  .beginning-copy { min-height: 660px; }
+  .beginning-frame { width: 270px; }
   .work-divider { min-height: 220px; }
   .work-divider h2 { font-size: 82px; }
   .masonry-scroll { padding: 16px 14px; }
@@ -621,5 +651,5 @@ a { color: inherit; }
 
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
-  .marquee-track, .beginning-track { animation: none; }
+  .marquee-track { animation: none; }
 }

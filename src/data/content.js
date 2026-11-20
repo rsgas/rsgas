@@ -4,6 +4,11 @@ export const beginningImages = [
   { label: 'Frame study', note: '03', url: '' },
   { label: 'Behind the lens', note: '04', url: '' },
   { label: 'On location', note: '05', url: '' },
+  { label: 'Light study', note: '06', url: '' },
+  { label: 'Storyboards', note: '07', url: '' },
+  { label: 'Location scout', note: '08', url: '' },
+  { label: 'Between takes', note: '09', url: '' },
+  { label: 'First frame', note: '10', url: '' },
 ]
 
 export const workItems = [
