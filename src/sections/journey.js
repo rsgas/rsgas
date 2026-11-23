@@ -8,7 +8,7 @@ export function renderJourney() {
           <p>04 / JOURNEY</p>
           <h2 id="journey-title">Learning in<br>the <em>real world.</em></h2>
         </header>
-        <div class="journey-list">
+        <div class="journey-list" id="journey">
           ${journey.map((item) => `
             <article class="journey-row" data-reveal="text">
               <p>${item.year}</p>

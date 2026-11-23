@@ -11,6 +11,12 @@ gsap.registerPlugin(Observer, ScrollToPlugin, ScrollTrigger, SplitText)
 const innerSelector = '[data-inner-scroll], [data-masonry-scroll]'
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
+// Return the active section ID, or null when no section is active.
+export function userCurrentSession() {
+  return document.querySelector('[data-section="stop"]:not([aria-hidden="true"])')?.id || null
+}
+
+// Set up section navigation, reveal animations, and input handlers.
 export function mountFullpageScroll() {
   const sections = Array.from(document.querySelectorAll('[data-section="stop"]'))
   const passthroughSections = Array.from(document.querySelectorAll('[data-section="passthrough"]'))
@@ -19,6 +25,7 @@ export function mountFullpageScroll() {
   let currentIndex = 0
   let activeIndex = -1
   let isAnimating = false
+  let lastJumpTargetIndex = -1
   let lockUntil = 0
   let lastMovementDirection = 1
   let lastWindowY = window.scrollY
@@ -31,17 +38,24 @@ export function mountFullpageScroll() {
   let touchGesture = null
   const sectionTimelines = new WeakMap()
   const sectionSplits = new WeakMap()
+  const preloadedImages = new WeakSet()
   const edgeTimes = new WeakMap()
   const edgeWheelStates = new WeakMap()
   const innerScrollStates = new WeakMap()
   const registeredInnerScrolls = new WeakSet()
 
+  // Get a section's document position, including the current page scroll.
   const sectionTop = (section) => section.getBoundingClientRect().top + window.scrollY
+  // Find a section's nested scrollable content.
   const getInnerScroll = (section) => section?.querySelector(innerSelector)
+  // Check whether nested content can scroll.
   const hasOverflow = (inner) => inner.scrollHeight > inner.clientHeight
+  // Block input while a section jump is running or settling.
   const isLocked = () => isAnimating || Date.now() < lockUntil
+  // Map scroll direction to the edge of a nested scroller.
   const edgeKey = (direction) => direction > 0 ? 'bottom' : 'top'
 
+  // Correct the page position without triggering smooth-scroll CSS.
   const scrollInstantly = (top) => {
     const behavior = document.documentElement.style.scrollBehavior
     document.documentElement.style.scrollBehavior = 'auto'
@@ -50,17 +64,20 @@ export function mountFullpageScroll() {
     suppressSettleUntil = Date.now() + scrollConfig.SCROLLEND_DEBOUNCE
   }
 
+  // Find the closest full-page section for the current scroll position.
   const nearestStopIndex = (position) => sections.reduce((nearest, section, index) => (
     Math.abs(sectionTop(section) - position) < Math.abs(sectionTop(sections[nearest]) - position)
       ? index
       : nearest
   ), 0)
 
+  // Find a non-stopping section currently between two full-page sections.
   const passthroughAt = (position) => passthroughSections.find((section) => (
     position >= sectionTop(section) &&
     position < sectionTop(section) + section.offsetHeight
   ))
 
+  // Remember when input first reached a nested scroller's edge.
   const recordEdge = (inner, direction, time = Date.now()) => {
     const key = edgeKey(direction)
     const times = edgeTimes.get(inner) || {}
@@ -72,6 +89,7 @@ export function mountFullpageScroll() {
     edgeWheelStates.set(inner, states)
   }
 
+  // Position nested scroll areas at the correct edge when entering a section.
   const setInnerLanding = (section, direction) => {
     const inner = getInnerScroll(section)
     if (!inner || !hasOverflow(inner)) return
@@ -90,6 +108,7 @@ export function mountFullpageScroll() {
     })
   }
 
+  // Collect reveal targets while excluding cards managed by their own observer.
   const revealElements = (section, layer) => {
     const selector = `[data-reveal="${layer}"]`
     return [
@@ -98,10 +117,34 @@ export function mountFullpageScroll() {
     ].filter((element) => !element.closest('[data-card-reveal]'))
   }
 
+  // Notify section components when a reveal lifecycle step occurs.
   const dispatchRevealEvent = (section, name) => {
     section.dispatchEvent(new CustomEvent(name, { bubbles: true }))
   }
 
+  // Reset the section background wipe before another reveal.
+  const resetBackground = (section) => {
+    gsap.killTweensOf(section, '--background-reveal')
+    gsap.set(section, { '--background-reveal': 0 })
+  }
+
+  // Reveal the section background, respecting reduced-motion preferences.
+  const revealBackground = (section) => {
+    if (reducedMotion) {
+      gsap.set(section, { '--background-reveal': 1 })
+      return
+    }
+
+    resetBackground(section)
+    gsap.to(section, {
+      '--background-reveal': 1,
+      duration: revealConfig.BG_DURATION,
+      ease: 'power2.out',
+      overwrite: true,
+    })
+  }
+
+  // Wait for an image to load before decoding it.
   const decodeImage = (image) => {
     const loaded = image.complete
       ? Promise.resolve()
@@ -114,21 +157,27 @@ export function mountFullpageScroll() {
     ))
   }
 
-  const waitForImages = async (section) => {
-    const images = Array.from(section.querySelectorAll('img'))
-      .filter((image) => !image.closest('[data-card-reveal]'))
+  // Start loading section images early, with a timeout fallback for decoding.
+  const preloadImages = (section) => {
+    const images = Array.from(section.querySelectorAll('img')).filter((image) => {
+      if (preloadedImages.has(image)) return false
+      preloadedImages.add(image)
+      image.loading = 'eager'
+      return true
+    })
     if (!images.length) return
 
     let timeout
-    await Promise.race([
-      Promise.all(images.map((image) => decodeImage(image).catch(() => undefined))),
+    const decoded = Promise.all(images.map((image) => decodeImage(image).catch(() => undefined)))
+    Promise.race([
+      decoded,
       new Promise((resolve) => {
         timeout = window.setTimeout(resolve, revealConfig.IMAGE_DECODE_TIMEOUT)
       }),
-    ])
-    window.clearTimeout(timeout)
+    ]).finally(() => window.clearTimeout(timeout))
   }
 
+  // Cancel a section's reveal and restore its hidden starting state.
   const resetSectionReveal = (section) => {
     sectionTimelines.get(section)?.kill?.()
     sectionTimelines.delete(section)
@@ -142,6 +191,7 @@ export function mountFullpageScroll() {
       ...revealElements(section, 'media'),
       ...revealElements(section, 'text'),
     ]
+    resetBackground(section)
     gsap.killTweensOf(targets)
     gsap.set(targets, { clearProps: 'transform,opacity,visibility,willChange' })
     gsap.set(targets, { x: 40, opacity: 0, visibility: 'hidden' })
@@ -152,6 +202,7 @@ export function mountFullpageScroll() {
     })
   }
 
+  // Hide a section and mark it unavailable to assistive technology.
   const hideSection = (section) => {
     resetSectionReveal(section)
     gsap.killTweensOf(section)
@@ -159,7 +210,9 @@ export function mountFullpageScroll() {
     section.setAttribute('aria-hidden', 'true')
   }
 
+  // Clear reveal styles and announce that the section is ready.
   const finishSectionReveal = (section, targets) => {
+    gsap.set(section, { '--background-reveal': 1 })
     gsap.set(targets, { clearProps: 'transform,opacity,visibility,willChange' })
     const hidden = targets.filter((element) => {
       const style = getComputedStyle(element)
@@ -171,86 +224,87 @@ export function mountFullpageScroll() {
     dispatchRevealEvent(section, 'sectionrevealcomplete')
   }
 
+  // Coordinate background, media, and text entrance animations for a section.
   const animateSection = (section) => {
-    const background = revealElements(section, 'bg')
     const media = revealElements(section, 'media')
     const text = revealElements(section, 'text')
     const heroTitle = section.matches('.hero') ? section.querySelector('.hero-title') : null
-    const textTargets = heroTitle ? text.filter((element) => element !== heroTitle) : text
+    const heroTitleSlider = heroTitle?.querySelector('[data-hero-title-slider]')
+    const textTargets = heroTitle && !heroTitleSlider
+      ? text.filter((element) => element !== heroTitle)
+      : text
     const token = {}
     sectionTimelines.set(section, token)
-    if (background.length) gsap.set(background, { opacity: 1, visibility: 'visible' })
+    revealBackground(section)
+    preloadImages(section)
+    dispatchRevealEvent(section, 'sectionrevealstart')
 
-    const buildTimeline = () => {
-      if (sectionTimelines.get(section) !== token || sections[activeIndex] !== section) return
-      const timeline = gsap.timeline({ paused: true })
-      sectionTimelines.set(section, timeline)
+    const timeline = gsap.timeline({ paused: true })
+    sectionTimelines.set(section, timeline)
 
-      const addLayer = (targets, label, time, duration, onComplete) => {
-        if (!targets.length) return
-        timeline.addLabel(label, time)
-        timeline.set(targets, { visibility: 'visible', willChange: 'transform, opacity' }, label)
-        timeline.fromTo(targets, { x: 40, opacity: 0 }, {
-          x: 0,
-          opacity: 1,
-          duration,
-          ease: 'power3.out',
-          clearProps: 'transform,opacity,visibility,willChange',
-          onComplete,
-        }, label)
-      }
-
-      const addTextLayer = (time) => {
-        addLayer(textTargets, 'text', time, revealConfig.TEXT_DURATION)
-        if (!heroTitle) return
-
-        const split = new SplitText(heroTitle, {
-          type: 'chars,words',
-          charsClass: 'hero-char',
-          wordsClass: 'hero-word',
-        })
-        sectionSplits.set(section, split)
-        gsap.set(split.chars, { x: 40, opacity: 0, visibility: 'hidden' })
-        timeline.set(heroTitle, { x: 0, opacity: 1, visibility: 'visible' }, 'text')
-        timeline.set(split.chars, { visibility: 'visible', willChange: 'transform, opacity' }, 'text')
-        timeline.fromTo(split.chars, { x: 40, opacity: 0 }, {
-          x: 0,
-          opacity: 1,
-          duration: revealConfig.TEXT_DURATION,
-          stagger: revealConfig.HERO_CHAR_STAGGER,
-          ease: 'power3.out',
-          clearProps: 'transform,opacity,visibility,willChange',
-        }, 'text')
-      }
-
-      const complete = () => {
-        const split = sectionSplits.get(section)
-        const splitChars = split ? split.chars : []
-        if (split) {
-          split.revert()
-          sectionSplits.delete(section)
-        }
-        finishSectionReveal(section, [...background, ...media, ...textTargets, ...(heroTitle ? [heroTitle] : []), ...splitChars])
-      }
-
-      timeline.addLabel('bg', 0)
-      timeline.to(background, { opacity: 1, duration: revealConfig.BG_DURATION, ease: 'none' }, 'bg')
-      if (media.length) {
-        addLayer(media, 'media', revealConfig.LAYER_GAP, revealConfig.MEDIA_DURATION, () => {
-          media.forEach((element) => dispatchRevealEvent(element, 'sectionmediarevealcomplete'))
-        })
-        addTextLayer(revealConfig.LAYER_GAP * 2)
-      } else {
-        addTextLayer(revealConfig.LAYER_GAP)
-      }
-      timeline.eventCallback('onComplete', complete)
-      timeline.play()
+    // Add a stagger-free entrance for one reveal layer.
+    const addLayer = (targets, label, time, duration, onComplete) => {
+      if (!targets.length) return
+      timeline.addLabel(label, time)
+      timeline.set(targets, { visibility: 'visible', willChange: 'transform, opacity' }, label)
+      timeline.fromTo(targets, { x: 40, opacity: 0 }, {
+        x: 0,
+        opacity: 1,
+        duration,
+        ease: 'power3.out',
+        clearProps: 'transform,opacity,visibility,willChange',
+        onComplete,
+      }, label)
     }
 
-    if (media.length) waitForImages(section).then(buildTimeline)
-    else buildTimeline()
+    const textStart = revealConfig.BG_DURATION * revealConfig.TEXT_START_PROGRESS
+    // Reveal hero text as characters unless the title is driven by its own slider.
+    const addTextLayer = () => {
+      addLayer(textTargets, 'text', textStart, revealConfig.TEXT_DURATION)
+      if (!heroTitle || heroTitleSlider) return
+
+      const split = new SplitText(heroTitle, {
+        type: 'chars,words',
+        charsClass: 'hero-char',
+        wordsClass: 'hero-word',
+      })
+      sectionSplits.set(section, split)
+      gsap.set(split.chars, { x: 40, opacity: 0, visibility: 'hidden' })
+      timeline.set(heroTitle, { x: 0, opacity: 1, visibility: 'visible' }, 'text')
+      timeline.set(split.chars, { visibility: 'visible', willChange: 'transform, opacity' }, 'text')
+      timeline.fromTo(split.chars, { x: 40, opacity: 0 }, {
+        x: 0,
+        opacity: 1,
+        duration: revealConfig.TEXT_DURATION,
+        stagger: revealConfig.HERO_CHAR_STAGGER,
+        ease: 'power3.out',
+        clearProps: 'transform,opacity,visibility,willChange',
+      }, 'text')
+    }
+
+    // Start media and text at their configured offsets within the timeline.
+    if (media.length) {
+      const mediaStart = revealConfig.BG_DURATION * revealConfig.MEDIA_START_PROGRESS
+      addLayer(media, 'media', mediaStart, revealConfig.MEDIA_DURATION, () => {
+        // Let components know their media entrance has finished.
+        media.forEach((element) => dispatchRevealEvent(element, 'sectionmediarevealcomplete'))
+      })
+    }
+    addTextLayer()
+    // Restore SplitText markup and finish the section after all timeline layers complete.
+    timeline.eventCallback('onComplete', () => {
+      const split = sectionSplits.get(section)
+      const splitChars = split ? split.chars : []
+      if (split) {
+        split.revert()
+        sectionSplits.delete(section)
+      }
+      finishSectionReveal(section, [...media, ...textTargets, ...(heroTitle ? [heroTitle] : []), ...splitChars])
+    })
+    timeline.play()
   }
 
+  // Show a section immediately when entrance animation should be skipped.
   const showSectionImmediately = (section) => {
     sectionTimelines.get(section)?.kill?.()
     sectionTimelines.delete(section)
@@ -260,6 +314,9 @@ export function mountFullpageScroll() {
       sectionSplits.delete(section)
     }
 
+    revealBackground(section)
+    preloadImages(section)
+    dispatchRevealEvent(section, 'sectionrevealstart')
     const media = revealElements(section, 'media')
     const text = revealElements(section, 'text')
     const targets = [...revealElements(section, 'bg'), ...media, ...text]
@@ -269,12 +326,16 @@ export function mountFullpageScroll() {
     finishSectionReveal(section, targets)
   }
 
+  // Mark the target active, preload nearby images, and run its reveal.
   const activateSection = (index, animate = true) => {
     if (activeIndex >= 0 && activeIndex !== index) hideSection(sections[activeIndex])
     currentIndex = index
     activeIndex = index
 
     const section = sections[index]
+    preloadImages(section)
+    if (sections[index - 1]) preloadImages(sections[index - 1])
+    if (sections[index + 1]) preloadImages(sections[index + 1])
     section.removeAttribute('aria-hidden')
     gsap.set(section, { autoAlpha: 1 })
 
@@ -286,6 +347,7 @@ export function mountFullpageScroll() {
     showSectionImmediately(section)
   }
 
+  // Clear a partial wheel gesture before switching input scopes.
   const resetWheelAccumulator = () => {
     wheelDelta = 0
     wheelDirection = 0
@@ -294,6 +356,7 @@ export function mountFullpageScroll() {
     wheelTimer = 0
   }
 
+  // Combine wheel deltas until they pass the relevant navigation threshold.
   const accumulateWheel = (direction, amount, threshold, scope) => {
     if (wheelDirection !== direction || wheelScope !== scope) {
       resetWheelAccumulator()
@@ -311,36 +374,46 @@ export function mountFullpageScroll() {
     }
   }
 
+  // Jump to a requested section and activate it once the scroll arrives.
   const goToSection = (index, direction = Math.sign(index - currentIndex)) => {
     if (isLocked() || index < 0 || index >= sections.length || index === currentIndex) return
 
-    const from = sectionTop(sections[currentIndex])
-    const to = sectionTop(sections[index])
-    const skipped = passthroughSections.filter((section) => {
-      const top = sectionTop(section)
-      return top > Math.min(from, to) && top < Math.max(from, to)
-    }).length
-
     resetWheelAccumulator()
+    lastJumpTargetIndex = index
     gsap.killTweensOf(sections[currentIndex])
     gsap.set(sections[currentIndex], { y: 0 })
+    preloadImages(sections[index])
     setInnerLanding(sections[index], direction)
     isAnimating = true
-    gsap.to(window, {
+    // Finish once, whether the tween reaches the target early or completes normally.
+    const finishJump = () => {
+      if (!isAnimating) return
+      isAnimating = false
+      lockUntil = Date.now() + scrollConfig.LOCK_AFTER_JUMP
+      activateSection(index)
+      scheduleSettledPosition()
+    }
+
+    let jumpTween
+    jumpTween = gsap.to(window, {
       scrollTo: sections[index],
-      duration: reducedMotion
-        ? 0
-        : scrollConfig.JUMP_DURATION + skipped * scrollConfig.PASSTHROUGH_EXTRA_DURATION,
+      duration: reducedMotion ? 0 : scrollConfig.JUMP_DURATION,
       ease: 'power3.inOut',
-      onComplete: () => {
-        isAnimating = false
-        lockUntil = Date.now() + scrollConfig.LOCK_AFTER_JUMP
-        activateSection(index)
-        scheduleSettledPosition()
+      onUpdate: () => {
+        const targetTop = sectionTop(sections[index])
+        const reachedTarget = direction > 0
+          ? window.scrollY >= targetTop
+          : window.scrollY <= targetTop
+        if (reachedTarget) {
+          jumpTween.kill()
+          finishJump()
+        }
       },
+      onComplete: finishJump,
     })
   }
 
+  // Snap to a section and synchronize its active and nested-scroll state.
   const syncToStop = (index, animate = false, resetInner = true) => {
     currentIndex = index
     if (resetInner) setInnerLanding(sections[index], 1)
@@ -348,31 +421,35 @@ export function mountFullpageScroll() {
     activateSection(index, animate)
   }
 
+  // Resolve a target element to its containing full-page section.
   const findSectionForTarget = (target) => {
     if (!(target instanceof Element)) return null
     return target.closest('[data-section="stop"]')
   }
 
+  // Find the nested scroller containing an input target, if any.
   const targetInner = (target, section) => {
     if (!(target instanceof Element)) return null
     const inner = target.closest(innerSelector)
     return inner && section.contains(inner) ? inner : null
   }
 
+  // Check whether nested content can continue scrolling in this direction.
   const canInnerScroll = (inner, direction) => direction > 0
     ? inner.scrollTop + inner.clientHeight < inner.scrollHeight
     : inner.scrollTop > 0
 
+    // Let nested content scroll first; move sections only after it reaches an edge.
   const handleWheel = (event) => {
     const direction = Math.sign(event.deltaY)
     if (!direction) return
 
-    lastMovementDirection = direction
     if (isLocked()) {
       event.preventDefault()
       resetWheelAccumulator()
       return
     }
+    lastMovementDirection = direction
 
     const section = sections[currentIndex]
     const inner = targetInner(event.target, section)
@@ -417,6 +494,7 @@ export function mountFullpageScroll() {
     accumulateWheel(direction, Math.abs(event.deltaY), scrollConfig.WHEEL_MIN_DELTA, 'page')
   }
 
+  // Track nested scroller edges so repeated input can leave the section reliably.
   const markInitialInnerEdges = () => {
     document.querySelectorAll(innerSelector).forEach((inner) => {
       const overflow = hasOverflow(inner)
@@ -433,6 +511,7 @@ export function mountFullpageScroll() {
 
       if (!registeredInnerScrolls.has(inner)) {
         registeredInnerScrolls.add(inner)
+        // Record when a nested scroller reaches its top or bottom.
         inner.addEventListener('scroll', () => {
           const nextOverflow = hasOverflow(inner)
           const nextTop = nextOverflow && inner.scrollTop <= 0
@@ -446,6 +525,7 @@ export function mountFullpageScroll() {
     })
   }
 
+  // Apply a small resisted offset while touch input is blocked at a scroll edge.
   const animateRubberBand = (section, deltaY) => {
     const offset = Math.sign(deltaY) * Math.min(
       scrollConfig.RUBBER_BAND_MAX,
@@ -454,6 +534,7 @@ export function mountFullpageScroll() {
     gsap.set(section, { y: offset })
   }
 
+  // Return a rubber-banded section to its resting position.
   const releaseRubberBand = (section) => {
     if (!section) return
     gsap.to(section, {
@@ -463,6 +544,7 @@ export function mountFullpageScroll() {
     })
   }
 
+  // Capture the start of a single-finger gesture and its nested-scroll state.
   const onTouchStart = (event) => {
     if (event.touches.length !== 1) {
       touchGesture = null
@@ -495,10 +577,12 @@ export function mountFullpageScroll() {
       axis: '',
       edgeCandidate: false,
       reachedEdge: false,
+      nativeRefresh: false,
       blocked: isLocked(),
     }
   }
 
+  // Route vertical swipes to nested scrolling or full-page navigation.
   const onTouchMove = (event) => {
     if (!touchGesture || event.touches.length !== 1) return
     const touch = event.touches[0]
@@ -506,6 +590,13 @@ export function mountFullpageScroll() {
     const deltaY = touch.clientY - touchGesture.startY
     touchGesture.currentX = touch.clientX
     touchGesture.currentY = touch.clientY
+
+    // Let Android handle downward pulls at the page top as native refresh gestures.
+    if (touchGesture.nativeRefresh) return
+    if (currentIndex === 0 && window.scrollY <= 1 && deltaY > 0 && !touchGesture.inner) {
+      touchGesture.nativeRefresh = true
+      return
+    }
 
     if (touchGesture.blocked || isLocked()) {
       if (event.cancelable) event.preventDefault()
@@ -562,11 +653,13 @@ export function mountFullpageScroll() {
     animateRubberBand(touchGesture.section, deltaY)
   }
 
+  // Decide whether a completed swipe should change sections.
   const finishTouch = () => {
     if (!touchGesture) return
     const gesture = touchGesture
     touchGesture = null
 
+    if (gesture.nativeRefresh) return
     if (gesture.axis === 'x' || gesture.blocked) {
       releaseRubberBand(gesture.section)
       return
@@ -594,6 +687,7 @@ export function mountFullpageScroll() {
     }
   }
 
+  // Snap the page to the closest section after native or animated scrolling settles.
   const syncSettledPosition = () => {
     if (isAnimating) return
     if (Date.now() < suppressSettleUntil) {
@@ -602,6 +696,10 @@ export function mountFullpageScroll() {
     }
     const passthrough = passthroughAt(window.scrollY)
     if (passthrough) {
+      if (activeIndex >= 0 && activeIndex === lastJumpTargetIndex) {
+        scrollInstantly(sectionTop(sections[activeIndex]))
+        return
+      }
       if (Date.now() < lockUntil) {
         scheduleSettledPosition()
         return
@@ -630,6 +728,7 @@ export function mountFullpageScroll() {
     }
   }
 
+  // Debounce scroll settling until jumps and short input locks finish.
   const scheduleSettledPosition = () => {
     window.clearTimeout(settleTimer)
     const delay = Math.max(
@@ -640,6 +739,7 @@ export function mountFullpageScroll() {
     settleTimer = window.setTimeout(syncSettledPosition, delay)
   }
 
+  // Initialize the active section from the URL hash or current scroll position.
   const syncInitialPosition = () => {
     const hashTarget = location.hash ? document.getElementById(location.hash.slice(1)) : null
     const stopTarget = findSectionForTarget(hashTarget)
@@ -651,6 +751,7 @@ export function mountFullpageScroll() {
     syncToStop(Math.max(0, targetIndex), activeIndex < 0)
   }
 
+  // Recalculate section positions after viewport dimensions change.
   const onResize = () => {
     ScrollTrigger.refresh()
     markInitialInnerEdges()
@@ -667,6 +768,7 @@ export function mountFullpageScroll() {
 
   syncInitialPosition()
 
+  // Keep the active section synchronized with manual scroll movement.
   window.addEventListener('scroll', () => {
     const delta = window.scrollY - lastWindowY
     if (delta) lastMovementDirection = Math.sign(delta)
@@ -679,6 +781,7 @@ export function mountFullpageScroll() {
   window.addEventListener('hashchange', syncInitialPosition)
   window.addEventListener('popstate', syncInitialPosition)
 
+  // Handle wheel input inside nested scrollers without allowing page-level default scroll.
   document.addEventListener('wheel', (event) => {
     if (event.target instanceof Element && event.target.closest(innerSelector)) {
       handleWheel(event)
@@ -688,11 +791,13 @@ export function mountFullpageScroll() {
   document.addEventListener('touchstart', onTouchStart, { capture: true, passive: true })
   document.addEventListener('touchmove', onTouchMove, { capture: true, passive: false })
   document.addEventListener('touchend', finishTouch, { capture: true, passive: true })
+  // Release any touch feedback if the browser cancels the gesture.
   document.addEventListener('touchcancel', () => {
     if (touchGesture) releaseRubberBand(touchGesture.section)
     touchGesture = null
   }, { capture: true, passive: true })
 
+  // Map keyboard navigation keys to section jumps while preserving normal form controls.
   window.addEventListener('keydown', (event) => {
     const target = event.target
     if (
@@ -730,6 +835,7 @@ export function mountFullpageScroll() {
     goToSection(currentIndex + direction, direction)
   })
 
+  // Route internal links through the same section navigation logic.
   document.addEventListener('click', (event) => {
     if (!(event.target instanceof Element)) return
     const link = event.target.closest('a[href^="#"]')
@@ -756,6 +862,7 @@ export function mountFullpageScroll() {
     }
   })
 
+  // Capture wheel gestures outside nested scrollers for full-page navigation.
   const observer = Observer.create({
     target: window,
     type: 'wheel',
@@ -770,18 +877,16 @@ export function mountFullpageScroll() {
 
   const workTitle = document.querySelector('.work-divider')
   if (workTitle) {
-    const background = revealElements(workTitle, 'bg')
+    // Reveal the standalone Work divider when it enters the viewport.
     const text = revealElements(workTitle, 'text')
     if (reducedMotion) {
-      gsap.set([...background, ...text], { clearProps: 'transform,opacity,visibility,willChange' })
-      gsap.set([...background, ...text], { x: 0, opacity: 1, visibility: 'visible' })
+      revealBackground(workTitle)
+      gsap.set(text, { clearProps: 'transform,opacity,visibility,willChange' })
+      gsap.set(text, { x: 0, opacity: 1, visibility: 'visible' })
     } else {
       gsap.set(text, { x: 40, opacity: 0, visibility: 'hidden' })
       const timeline = gsap.timeline({ paused: true })
-      timeline.addLabel('bg', 0)
-        .set(background, { visibility: 'visible' }, 'bg')
-        .to(background, { opacity: 1, duration: revealConfig.BG_DURATION, ease: 'none' }, 'bg')
-        .addLabel('text', revealConfig.LAYER_GAP)
+      timeline.addLabel('text', revealConfig.BG_DURATION * revealConfig.TEXT_START_PROGRESS)
         .set(text, { visibility: 'visible', willChange: 'transform, opacity' }, 'text')
         .fromTo(text, { x: 40, opacity: 0 }, {
           x: 0,
@@ -791,11 +896,15 @@ export function mountFullpageScroll() {
           clearProps: 'transform,opacity,visibility,willChange',
         }, 'text')
 
+      // Reset the divider when it leaves view so it can replay on return.
       const resetWorkTitle = () => {
+        resetBackground(workTitle)
         timeline.pause(0)
         gsap.set(text, { x: 40, opacity: 0, visibility: 'hidden' })
       }
+      // Replay the divider's text and background wipe on either entry direction.
       const playWorkTitle = () => {
+        revealBackground(workTitle)
         gsap.set(text, { x: 40, opacity: 0, visibility: 'hidden' })
         timeline.restart()
       }
@@ -810,6 +919,27 @@ export function mountFullpageScroll() {
     }
   }
 
+  const marquee = document.querySelector('.marquee')
+  if (marquee) {
+    if (reducedMotion) {
+      revealBackground(marquee)
+    } else {
+      // Replay the marquee background wipe whenever it enters the viewport.
+      const animateMarqueeBackground = () => revealBackground(marquee)
+      const resetMarqueeBackground = () => resetBackground(marquee)
+      ScrollTrigger.create({
+        trigger: marquee,
+        start: 'top bottom',
+        end: 'bottom top',
+        onEnter: animateMarqueeBackground,
+        onEnterBack: animateMarqueeBackground,
+        onLeave: resetMarqueeBackground,
+        onLeaveBack: resetMarqueeBackground,
+      })
+    }
+  }
+
+  // Pause infinite decorative animations while their elements are offscreen.
   const loopObserver = new IntersectionObserver((entries) => {
     entries.forEach((entry) => {
       entry.target.style.animationPlayState = entry.isIntersecting ? 'running' : 'paused'
@@ -821,6 +951,7 @@ export function mountFullpageScroll() {
     loopObserver.observe(element)
   })
 
+  // Refresh scroll triggers after fonts, images, or the full page finish loading.
   document.fonts?.ready.then(() => ScrollTrigger.refresh())
   document.querySelectorAll('img').forEach((image) => {
     image.addEventListener('load', () => ScrollTrigger.refresh(), { once: true })

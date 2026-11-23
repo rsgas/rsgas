@@ -1,6 +1,7 @@
 import './App.css'
 import { mountBeginningCarousel } from './Components/BeginningCarousel.js'
 import { mountFullpageScroll } from './Components/FullpageScroll.js'
+import { mountHeroTitleSlider } from './Components/HeroTitleSlider.js'
 import { mountMasonryGalleries } from './Components/MasonryGallery.js'
 import { renderBeginning } from './sections/beginning.js'
 import { renderDrawing } from './sections/drawing.js'
@@ -29,4 +30,7 @@ app.innerHTML = `
 
 mountMasonryGalleries()
 mountBeginningCarousel()
+const cleanupHeroTitleSlider = mountHeroTitleSlider()
 mountFullpageScroll()
+
+if (import.meta.hot) import.meta.hot.dispose(cleanupHeroTitleSlider)

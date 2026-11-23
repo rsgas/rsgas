@@ -1,7 +1,9 @@
 import gsap from 'gsap'
 import { revealConfig } from '../config/reveal.js'
+import { userCurrentSession } from './FullpageScroll.js'
 
 const galleries = new Map()
+// Escape content before placing data values into generated HTML.
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({
   '&': '&amp;',
   '<': '&lt;',
@@ -10,6 +12,7 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character
   "'": '&#39;',
 })[character])
 
+// Save gallery data for mounting and render the section shell.
 export function renderMasonryGallery({ id, title, description, items, theme }) {
   galleries.set(id, items)
   return `
@@ -28,6 +31,7 @@ export function renderMasonryGallery({ id, title, description, items, theme }) {
   `
 }
 
+// Render each gallery's cards and connect its reveal and touch behavior.
 export function mountMasonryGalleries() {
   let activeTouchCard
   document.querySelectorAll('[data-masonry-gallery]').forEach((gallery) => {
@@ -37,7 +41,6 @@ export function mountMasonryGalleries() {
     let cardObserver
     let revealActive = false
     let batchRunning = false
-    let revealGeneration = 0
     let revealTimeline
     let revealQueue = []
     let pendingCards = new Set()
@@ -45,15 +48,87 @@ export function mountMasonryGalleries() {
     let revealedCards = new WeakSet()
     let flushFrame = 0
     let resizeFrame
+    let moreOverlay
 
+    // Keep card lookups current after responsive rerenders.
     const cards = () => Array.from(columnsRoot.querySelectorAll('[data-card-reveal]'))
+    // Captions reveal separately from their cards.
     const captionFor = (card) => card.querySelector('[data-reveal="text"]')
+    // Add the See More overlay once so rerenders can reuse it.
+    const renderMore = () => {
+      const messages = [
+        'See More',
+        'Under construction 🚧',
+        'JS scroll bro 💀  ',
+        'Back Again?',
+      ]
+
+      if (moreOverlay) return
+      moreOverlay = document.createElement('div')
+      moreOverlay.className = 'masonry-more'
+      moreOverlay.innerHTML = `
+        <button type="button" aria-label="See more ${escapeHtml(gallery.querySelector('.masonry-heading h2').textContent)}">
+          <span class="more-label">See More</span> <span aria-hidden="true">↗</span>
+        </button>
+      `
+      const moreButton = moreOverlay.querySelector('button')
+      const moreLabel = moreButton.querySelector('.more-label')
+      let messagesIndex = 0
+
+      moreButton.addEventListener('click', () => { 
+        messagesIndex = (messagesIndex + 1) % messages.length
+        moreLabel.textContent = messages[messagesIndex]
+          if ( messagesIndex === 3) {
+            if (userCurrentSession() === 'work-gallery') {
+              window.location.href = '#drawing'
+              messagesIndex = 0
+            } else if (userCurrentSession() === 'drawing') {
+              window.location.href = '#journey'
+              messagesIndex = 0
+            }
+          }
+        console.log(userCurrentSession())
+      })
+      // moreOverlay.innerHTML = `<button aria-label="See more ${escapeHtml(gallery.querySelector('.masonry-heading h2').textContent)}">See More <span aria-hidden="true">↗</span></button>`
+
+      gsap.set(moreOverlay, { autoAlpha: 0, y: revealConfig.MORE_OFFSET })
+      gallery.append(moreOverlay)
+    }
+
+    // Reveal the overlay when the section finishes, without motion for reduced-motion users.
+    const showMore = () => {
+      if (!moreOverlay || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        if (moreOverlay) gsap.set(moreOverlay, { clearProps: 'transform,opacity,visibility' })
+        return
+      }
+
+      gsap.fromTo(moreOverlay, {
+        autoAlpha: 0,
+        y: revealConfig.MORE_OFFSET,
+      }, {
+        autoAlpha: 1,
+        y: 0,
+        duration: revealConfig.MORE_DURATION,
+        ease: 'power3.out',
+        clearProps: 'transform,opacity,visibility',
+      })
+    }
+
+    // Stop any in-flight reveal before hiding the overlay.
+    const hideMore = () => {
+      if (!moreOverlay) return
+      gsap.killTweensOf(moreOverlay)
+      gsap.set(moreOverlay, { autoAlpha: 0, y: revealConfig.MORE_OFFSET })
+    }
+
+    // Order visible cards top-to-bottom, then left-to-right.
     const sortReadingOrder = (first, second) => {
       const firstRect = first.getBoundingClientRect()
       const secondRect = second.getBoundingClientRect()
       return firstRect.top - secondRect.top || firstRect.left - secondRect.left
     }
 
+    // Return cards and captions to their hidden state before a reveal run.
     const hideCards = () => {
       const currentCards = cards()
       const captions = currentCards.map(captionFor).filter(Boolean)
@@ -63,8 +138,8 @@ export function mountMasonryGalleries() {
       gsap.set(captions, { opacity: 0, visibility: 'hidden' })
     }
 
+    // Clear observers, queued work, and animations before rebuilding card elements.
     const resetCardReveal = () => {
-      revealGeneration += 1
       revealActive = false
       batchRunning = false
       cardObserver?.disconnect()
@@ -79,40 +154,16 @@ export function mountMasonryGalleries() {
       hideCards()
     }
 
-    const waitForCardImages = async (batch) => {
-      const images = batch.flatMap((card) => Array.from(card.querySelectorAll('img')))
-      if (!images.length) return
-
-      let timeout
-      await Promise.race([
-        Promise.all(images.map((image) => {
-          const loaded = image.complete
-            ? Promise.resolve()
-            : new Promise((resolve) => {
-              image.addEventListener('load', resolve, { once: true })
-              image.addEventListener('error', resolve, { once: true })
-            })
-          return loaded.then(() => (
-            typeof image.decode === 'function' ? image.decode() : undefined
-          )).catch(() => undefined)
-        })),
-        new Promise((resolve) => {
-          timeout = window.setTimeout(resolve, revealConfig.IMAGE_DECODE_TIMEOUT)
-        }),
-      ])
-      window.clearTimeout(timeout)
-    }
-
-    const runNextBatch = async () => {
+    // Animate the next group of visible cards, keeping their visual reading order.
+    const runNextBatch = () => {
       if (!revealActive || batchRunning || !revealQueue.length) return
       batchRunning = true
-      const generation = revealGeneration
       const batch = revealQueue.splice(0).sort(sortReadingOrder)
-      await waitForCardImages(batch)
-      if (!revealActive || generation !== revealGeneration) return
 
+      // Cap the total stagger so large batches do not delay the rest of the gallery.
       const stagger = Math.min(revealConfig.CARD_STAGGER, revealConfig.SEQUENCE_MAX / batch.length)
       revealTimeline = gsap.timeline({
+        // Mark this batch complete, then continue with any newly visible cards.
         onComplete: () => {
           const targets = batch.flatMap((card) => [card, captionFor(card)].filter(Boolean))
           gsap.set(targets, { clearProps: 'transform,opacity,visibility,willChange' })
@@ -127,6 +178,7 @@ export function mountMasonryGalleries() {
         },
       })
 
+      // Stagger card and caption reveals while keeping each caption with its card.
       batch.forEach((card, index) => {
         const caption = captionFor(card)
         const start = index * stagger
@@ -153,6 +205,7 @@ export function mountMasonryGalleries() {
       })
     }
 
+    // Move newly visible cards into the reveal queue on the next animation frame.
     const flushPendingCards = () => {
       flushFrame = 0
       if (!revealActive || !pendingCards.size) return
@@ -164,12 +217,14 @@ export function mountMasonryGalleries() {
       runNextBatch()
     }
 
+    // Collect visible cards together to avoid starting a separate timeline per card.
     const queueVisibleCard = (card) => {
       if (!revealActive || queuedCards.has(card) || revealedCards.has(card)) return
       pendingCards.add(card)
       if (!flushFrame) flushFrame = window.requestAnimationFrame(flushPendingCards)
     }
 
+    // Start observing cards, or show them immediately when motion is reduced.
     const startCardReveal = () => {
       if (revealActive) return
       revealActive = true
@@ -187,12 +242,17 @@ export function mountMasonryGalleries() {
         return
       }
 
+      // Load images eagerly before observing cards so reveals are not delayed.
       cards().forEach((card) => {
+        card.querySelectorAll('img').forEach((image) => {
+          image.loading = 'eager'
+        })
         gsap.set(card, { visibility: 'visible' })
         cardObserver.observe(card)
       })
     }
 
+    // Reveal each card only once when it enters the gallery's scroll viewport.
     cardObserver = new IntersectionObserver((entries) => {
       entries.filter((entry) => entry.isIntersecting).forEach((entry) => {
         cardObserver.unobserve(entry.target)
@@ -200,17 +260,18 @@ export function mountMasonryGalleries() {
       })
     }, { root: scroll, threshold: 0.01 })
 
+    // Rebuild card columns for the current viewport while preserving active reveals.
     const renderColumns = () => {
       const restartReveal = revealActive
       if (restartReveal) resetCardReveal()
       const styles = getComputedStyle(scroll)
       const padding = parseFloat(styles.paddingLeft) + parseFloat(styles.paddingRight)
       const availableWidth = Math.max(1, scroll.clientWidth - padding)
-      const previousScroll = scroll.scrollTop
       const isSparse = window.innerWidth <= 768 && items.length > 0 && items.length <= 6
 
       if (activeTouchCard && gallery.contains(activeTouchCard)) activeTouchCard = undefined
 
+      // Build one card from project data, including an optional safe external link.
       const renderCard = (item) => {
         const width = Number(item.width) > 0 ? Number(item.width) : 1
         const height = Number(item.height) > 0 ? Number(item.height) : 1
@@ -242,23 +303,14 @@ export function mountMasonryGalleries() {
         `
       }
 
+      // Use a fixed sparse layout on small screens when there are only a few cards.
       if (isSparse) {
-        const cellWidth = Math.max(1, (availableWidth - 8) / 2)
-        const sparseDimensions = {
-          1: [availableWidth / 2, availableWidth * 2],
-          2: [availableWidth + 8, availableWidth * 4 + 8],
-          3: [availableWidth / 1.1, cellWidth * 2 / 0.45],
-          4: [cellWidth + 8, cellWidth * 4 + 8],
-          5: [availableWidth * 1.5 + 16, cellWidth * 6 + 16],
-          6: [cellWidth * 1.5 + 16, cellWidth * 6 + 16],
-        }
-        const [minHeight, maxHeight] = sparseDimensions[items.length]
         columnsRoot.className = `masonry-columns masonry-columns--sparse masonry-columns--sparse-${items.length}`
-        columnsRoot.style.setProperty('--sparse-min-height', `${minHeight}px`)
-        columnsRoot.style.setProperty('--sparse-max-height', `${maxHeight}px`)
+        columnsRoot.style.removeProperty('--sparse-min-height')
+        columnsRoot.style.removeProperty('--sparse-max-height')
         columnsRoot.innerHTML = items.map(renderCard).join('')
         hideCards()
-        scroll.scrollTop = previousScroll
+        renderMore()
         if (restartReveal) startCardReveal()
         return
       }
@@ -273,6 +325,7 @@ export function mountMasonryGalleries() {
       const columnWidth = Math.max(1, (availableWidth - gap * (count - 1)) / count)
       const columns = Array.from({ length: count }, () => ({ items: [], height: 0 }))
 
+      // Place each item in the currently shortest column to balance gallery height.
       items.forEach((item) => {
         const width = Number(item.width) > 0 ? Number(item.width) : 1
         const height = Number(item.height) > 0 ? Number(item.height) : 1
@@ -287,18 +340,23 @@ export function mountMasonryGalleries() {
 
       columnsRoot.innerHTML = columns.map((column) => `<div class="masonry-column">${column.items.join('')}</div>`).join('')
       hideCards()
-      scroll.scrollTop = previousScroll
+      renderMore()
       if (restartReveal) startCardReveal()
     }
 
     renderColumns()
-    gallery.addEventListener('sectionrevealcomplete', startCardReveal)
+    // Keep the overlay in sync with the section's reveal lifecycle.
+    gallery.addEventListener('sectionrevealcomplete', showMore)
+    gallery.addEventListener('sectionrevealreset', hideMore)
+    gallery.addEventListener('sectionrevealstart', startCardReveal)
     gallery.addEventListener('sectionrevealreset', resetCardReveal)
+    // Recalculate columns once per frame during viewport resizing.
     window.addEventListener('resize', () => {
       cancelAnimationFrame(resizeFrame)
       resizeFrame = requestAnimationFrame(renderColumns)
     })
 
+    // On touch devices, tap a card to toggle its details; links remain clickable.
     gallery.addEventListener('click', (event) => {
       if (!window.matchMedia('(hover: none)').matches || !(event.target instanceof Element) || event.target.closest('a')) return
       const card = event.target.closest('.masonry-card')

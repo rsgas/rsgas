@@ -18,7 +18,7 @@ export function renderBeginning() {
         <p class="section-index">01 — THE BEGINNING</p>
         <h2 id="beginning-title">It started<br>with <em>curiosity.</em></h2>
         <p class="beginning-lead">A classroom became a set. A camera became a way to notice.</p>
-        <div class="beginning-body">
+        <div class="beginning-body" id="beginning">
           <p>I am a student at SMKN 5 Bandung, majoring in Broadcasting and Film Production. Most of what I know came from being around people, trying roles, and learning when a plan met the unexpected.</p>
           <p>My first projects introduced me to directing, cinematography, editing, and color. They also taught me that a strong image begins with patient observation.</p>
         </div>
