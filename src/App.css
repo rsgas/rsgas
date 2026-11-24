@@ -262,7 +262,7 @@ a { color: inherit; }
   text-transform: uppercase;
 }
 .beginning-copy h2 em, .drawing-header h2 em, .journey-header h2 em {
-  color: var(--grey);
+  color: var(--accent);
   font-family: 'Cormorant Garamond', serif;
   font-size: .72em;
   font-weight: 500;
@@ -621,7 +621,7 @@ a { color: inherit; }
 .journey-scroll::-webkit-scrollbar { display: none; }
 .journey-header { display: grid; grid-template-columns: 25% 75%; align-items: start; }
 .journey-header h2 { margin: 0; }
-.journey-header h2 em { color: var(--grey); }
+.journey-header h2 em { color: var(--accent); }
 .journey-list { margin-top: 90px; border-top: 1px solid rgba(245,245,240,.24); }
 .journey-row {
   display: grid;
@@ -667,6 +667,14 @@ a { color: inherit; }
   letter-spacing: -.055em;
   text-transform: uppercase;
 }
+
+.accent { 
+  color: var(--accent); 
+  font-family: 'Cormorant Garamond', serif; 
+  font-size: 1.3em; font-weight: 500; 
+  font-style: italic; 
+  text-transform: lowercase; 
+  letter-spacing: -0.06em; }
 .footer-main a { padding-bottom: 7px; border-bottom: 1px solid var(--grey); text-decoration: none; font-size: 12px; }
 .footer-bottom {
   min-height: 82px;
@@ -682,6 +690,29 @@ a { color: inherit; }
 .footer-bottom div { display: flex; gap: 24px; }
 .footer-bottom a { text-decoration: none; }
 .footer-bottom > a { justify-self: end; }
+
+.icon {
+  width: 20px;
+  height: 20px;
+}
+
+.icon.gsap {
+  width: 30px;
+  display: flex;
+  align-items: center;
+}
+
+
+.icon.yrl svg{
+  width: 20px;
+  height: 20px;
+}
+
+.footer-icons {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
 
 @media (max-width: 900px) {
   .hero { min-height: 0; padding: 24px 20px 20px; }
